@@ -274,3 +274,11 @@ type RecurringJobList struct {
 	metav1.ListMeta `json:"metadata"`
 	Items           []RecurringJob `json:"items"`
 }
+
+type SupportBundle struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   types.SupportBundleSpec   `json:"spec,omitempty"`
+	Status types.SupportBundleStatus `json:"status,omitempty"`
+}
