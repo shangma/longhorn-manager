@@ -29,7 +29,6 @@ type VolumeManager struct {
 	ds *datastore.DataStore
 
 	currentNodeID string
-	sb            *SupportBundle
 }
 
 func NewVolumeManager(currentNodeID string, ds *datastore.DataStore) *VolumeManager {

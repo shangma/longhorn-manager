@@ -258,20 +258,6 @@ type Event struct {
 	EventType string   `json:"eventType"`
 }
 
-type SupportBundle struct {
-	client.Resource
-	NodeID             string              `json:"nodeID"`
-	State              manager.BundleState `json:"state"`
-	Name               string              `json:"name"`
-	ErrorMessage       manager.BundleError `json:"errorMessage"`
-	ProgressPercentage int                 `json:"progressPercentage"`
-}
-
-type SupportBundleInitateInput struct {
-	IssueURL    string `json:"issueURL"`
-	Description string `json:"description"`
-}
-
 type Tag struct {
 	client.Resource
 	Name    string `json:"name"`
@@ -398,8 +384,6 @@ func NewSchema() *client.Schemas {
 	schemas.AddType("diskCondition", types.Condition{})
 
 	schemas.AddType("event", Event{})
-	schemas.AddType("supportBundle", SupportBundle{})
-	schemas.AddType("supportBundleInitateInput", SupportBundleInitateInput{})
 
 	schemas.AddType("tag", Tag{})
 
@@ -1453,21 +1437,6 @@ func toEventCollection(eventList *v1.EventList) *client.GenericCollection {
 		data = append(data, toEventResource(event))
 	}
 	return &client.GenericCollection{Data: data, Collection: client.Collection{ResourceType: "event"}}
-}
-
-//Support Bundle Resource
-func toSupportBundleResource(nodeID string, sb *manager.SupportBundle) *SupportBundle {
-	return &SupportBundle{
-		Resource: client.Resource{
-			Id:   nodeID,
-			Type: "supportbundle",
-		},
-		NodeID:             nodeID,
-		State:              sb.State,
-		Name:               sb.Name,
-		ErrorMessage:       sb.Error,
-		ProgressPercentage: sb.ProgressPercentage,
-	}
 }
 
 func toTagResource(tag string, tagType string, apiContext *api.ApiContext) *Tag {
