@@ -180,6 +180,17 @@ const (
 	replicaManagerPrefix  = instanceManagerPrefix + "r-"
 )
 
+const (
+	SupportBundleStateNone       = ""
+	SupportBundleStateGenerating = "generating"
+	SupportBundleStateError      = "error"
+	SupportBundleStateReady      = "ready"
+
+	SupportBundleLabelKey = "longhorn.io/supportbundle"
+
+	SupportBundleManager = "support-bundle-manager"
+)
+
 func GenerateEngineNameForVolume(vName string) string {
 	return vName + engineSuffix + "-" + util.RandomID()
 }
