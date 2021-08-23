@@ -776,3 +776,15 @@ type RecurringJobSpec struct {
 type RecurringJobStatus struct {
 	OwnerID string `json:"ownerID"`
 }
+
+type SupportBundleSpec struct {
+	IssueURL    string `json:"issueURL"`
+	Description string `json:"description"`
+}
+
+type SupportBundleStatus struct {
+	State      string      `json:"state,omitempty"`
+	FileName   string      `json:"filename,omitempty"`
+	FileSize   int64       `json:"filesize,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty"`
+}
