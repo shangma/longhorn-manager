@@ -2,11 +2,11 @@ package api
 
 import (
 	"fmt"
+	"github.com/rancher/go-rancher/api"
 	"io"
 	"net/http"
 	"strconv"
-
-	"k8s.io/apimachinery/pkg/labels"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
@@ -17,7 +17,37 @@ import (
 	"github.com/longhorn/longhorn-manager/util"
 )
 
-func (s *Server) SupportBundleDownload(rw http.ResponseWriter, r *http.Request) error {
+func (s *Server) InitiateSupportBundle(w http.ResponseWriter, req *http.Request) error {
+	var sb *longhorn.SupportBundle
+	var supportBundleInput SupportBundleInitateInput
+
+	apiContext := api.GetApiContext(req)
+	if err := apiContext.Read(&supportBundleInput); err != nil {
+		return err
+	}
+
+	sb, err := s.m.InitSupportBundle(supportBundleInput.IssueURL, supportBundleInput.Description)
+	if err != nil {
+		return fmt.Errorf("unable to initiate Support Bundle Download:%v", err)
+	}
+
+	apiContext.Write(toSupportBundleResource(s.m.GetCurrentNodeID(), sb))
+	return nil
+}
+
+func (s *Server) QuerySupportBundle(w http.ResponseWriter, req *http.Request) error {
+	bundleName := mux.Vars(req)["bundleName"]
+	apiContext := api.GetApiContext(req)
+	sb, err := s.m.GetSupportBundle(bundleName)
+	if err != nil {
+		return errors.Wrap(err, "failed to get support bundle")
+	}
+
+	apiContext.Write(toSupportBundleResource(s.m.GetCurrentNodeID(), sb))
+	return nil
+}
+
+func (s *Server) DownloadSupportBundle(rw http.ResponseWriter, r *http.Request) error {
 	bundleName := mux.Vars(r)["bundleName"]
 
 	retainSb := false
@@ -31,12 +61,12 @@ func (s *Server) SupportBundleDownload(rw http.ResponseWriter, r *http.Request) 
 		return err
 	}
 
-	if sb.Status.State != types.SupportBundleStateReady || sb.Status.FileName == "" || sb.Status.FileSize == 0 {
+	if sb.Status.State != types.SupportBundleStateReadyForDownload || sb.Status.FileName == "" || sb.Status.FileSize == 0 {
 		util.ResponseError(rw, http.StatusBadRequest, errors.New("support bundle is not ready"))
 		return err
 	}
 
-	managerPodIP, err := s.getManagerPodIP(sb)
+	managerPodIP, err := s.m.GetManagerPodIP()
 	if err != nil {
 		util.ResponseError(rw, http.StatusBadRequest, errors.Wrap(err, "fail to get support bundle manager pod IP"))
 		return err
@@ -48,7 +78,12 @@ func (s *Server) SupportBundleDownload(rw http.ResponseWriter, r *http.Request) 
 		util.ResponseError(rw, http.StatusInternalServerError, err)
 		return err
 	}
-	resp, err := s.httpClient.Do(req)
+
+	httpClient := http.Client{
+		Timeout: 1 * time.Hour,
+	}
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		util.ResponseError(rw, http.StatusInternalServerError, err)
 		return err
@@ -83,21 +118,4 @@ func (s *Server) SupportBundleDownload(rw http.ResponseWriter, r *http.Request) 
 		return err
 	}
 	return nil
-}
-
-func (s *Server) getManagerPodIP(sb *longhorn.SupportBundle) (string, error) {
-	sets := labels.Set{
-		"app":                       types.SupportBundleManager,
-		types.SupportBundleLabelKey: sb.Name,
-	}
-
-	pods, err := s.m.ListPods(sets.AsSelector())
-	if err != nil {
-		return "", err
-
-	}
-	if len(pods) != 1 {
-		return "", errors.New("more than one manager pods are found")
-	}
-	return pods[0].Status.PodIP, nil
 }

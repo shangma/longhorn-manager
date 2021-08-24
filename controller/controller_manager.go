@@ -209,7 +209,6 @@ func StartControllers(logger logrus.FieldLogger, stopCh chan struct{}, controlle
 	go bvc.Run(Workers, stopCh)
 	go bc.Run(Workers, stopCh)
 	go rjc.Run(Workers, stopCh)
-	go sbc.Run(Workers, stopCh)
 
 	go kpvc.Run(Workers, stopCh)
 	go knc.Run(Workers, stopCh)

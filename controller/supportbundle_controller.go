@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -17,7 +19,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -75,7 +76,7 @@ func NewSupportBundleController(
 		ds: ds,
 
 		kubeClient:    kubeClient,
-		eventRecorder: eventBroadcaster.NewRecorder(scheme, v1.EventSource{Component: "longhorn-support-bundle-controller"}),
+		eventRecorder: eventBroadcaster.NewRecorder(scheme, corev1.EventSource{Component: "longhorn-support-bundle-controller"}),
 
 		sStoreSynced:             supportBundleInformer.Informer().HasSynced,
 		SupportBundleInitialized: "Initialized",
@@ -193,18 +194,24 @@ func (sbc *SupportBundleController) reconcile(supportBundleName string) (err err
 	case types.SupportBundleStateNone:
 		log.Debugf("[%s] generating a support bundle", sb.Name)
 
-		supportBundleImage, err := sbc.ds.GetSetting("SettingNameSupportBundleImage")
+		supportBundleImage, err := sbc.ds.GetSetting(types.SettingNameSupportBundleImage)
 		if err != nil {
 			return err
 		}
+
 		err = sbc.Create(sb, supportBundleImage.Value)
 		toUpdate := sb.DeepCopy()
 		if err != nil {
 			sbc.setError(toUpdate, fmt.Sprintf("fail to create manager for %s: %s", sb.Name, err))
 			return err
 		}
-		sbc.setState(toUpdate, types.SupportBundleStateGenerating)
+
+		sbc.setState(toUpdate, types.SupportBundleStateInProgress)
 		_, err = sbc.ds.UpdateSupportBundle(toUpdate)
+		return err
+	case types.SupportBundleStateInProgress:
+		logrus.Debugf("[%s] support bundle is being generated", sb.Name)
+		_, err = sbc.checkManagerStatus(sb)
 		return err
 	default:
 		log.Debugf("[%s] noop for state %s", sb.Name, sb.Status.State)
@@ -212,6 +219,7 @@ func (sbc *SupportBundleController) reconcile(supportBundleName string) (err err
 	}
 
 }
+
 func (sbc *SupportBundleController) getManagerName(supportBundle *longhorn.SupportBundle) string {
 	return fmt.Sprintf("supportbundle-manager-%s", supportBundle.Name)
 }
@@ -232,6 +240,34 @@ func (sbc *SupportBundleController) getImagePullPolicy() corev1.PullPolicy {
 		return corev1.PullNever
 	default:
 		return corev1.PullIfNotPresent
+	}
+}
+
+func (sbc *SupportBundleController) checkManagerStatus(sb *longhorn.SupportBundle) (*longhorn.SupportBundle, error) {
+	if time.Now().After(sb.CreationTimestamp.Add(types.SupportBundleCreationTimeout)) {
+		return sbc.setError(sb, "fail to generate support bundle: timeout")
+	}
+
+	managerStatus, err := sbc.GetStatus(sb)
+	if err != nil {
+		logrus.Debugf("[%s] manager pod is not ready: %s", sb.Name, err)
+		sbc.enqueueSupportBundle(sb)
+		return sb, nil
+	}
+
+	if managerStatus.Error {
+		return sbc.setError(sb, managerStatus.ErrorMessage)
+	}
+
+	switch managerStatus.Phase {
+	case string(types.SupportBundleStateReadyForDownload):
+		sb.Spec.ProgressPercentage = types.SupportBundleProgressPercentageTotal
+		sb.Status.State = types.SupportBundleStateReadyForDownload
+		return sbc.setReady(sb, managerStatus.Filename, managerStatus.Filesize)
+	default:
+		sb.Spec.ProgressPercentage = types.SupportBundleProgressPercentageYaml
+		sb.Status.State = types.SupportBundleStateInProgress
+		return sbc.setProgress(sb, int(types.SupportBundleProgressPercentageYaml))
 	}
 }
 
@@ -330,24 +366,91 @@ func (sbc *SupportBundleController) Create(sb *longhorn.SupportBundle, image str
 	return err
 }
 
-func (sbc *SupportBundleController) setError(toUpdate *longhorn.SupportBundle, reason string) {
-	log := getLoggerForSupportBundle(sbc.logger, toUpdate)
+func (sbc *SupportBundleController) setError(sb *longhorn.SupportBundle, reason string) (*longhorn.SupportBundle, error) {
+	log := getLoggerForSupportBundle(sbc.logger, sb)
 	log.Errorf(reason)
 
+	toUpdate := sb.DeepCopy()
 	sbc.SupportBundleInitialized.False(toUpdate)
 	sbc.SupportBundleInitialized.Message(toUpdate, reason)
 
 	toUpdate.Status.State = types.SupportBundleStateError
+	return sbc.ds.UpdateSupportBundle(toUpdate)
 }
 
-func (sbc *SupportBundleController) setState(toUpdate *longhorn.SupportBundle, state string) {
-	log := getLoggerForSupportBundle(sbc.logger, toUpdate)
-	log.Debugf("[%s] set state to %s", toUpdate.Name, state)
+func (sbc *SupportBundleController) setState(sb *longhorn.SupportBundle, state types.SuppportBundleState) (*longhorn.SupportBundle, error) {
+	log := getLoggerForSupportBundle(sbc.logger, sb)
+	log.Debugf("[%s] set state to %s", sb.Name, state)
 
-	if state == types.SupportBundleStateReady {
-		log.Debugf("[%s] set condition %s to true", toUpdate.Name, sbc.SupportBundleInitialized)
-		sbc.SupportBundleInitialized.True(toUpdate)
+	toUpdate := sb.DeepCopy()
+	toUpdate.Status.State = state
+	return sbc.ds.UpdateSupportBundle(toUpdate)
+}
+
+func (sbc *SupportBundleController) setReady(sb *longhorn.SupportBundle, filename string, filesize int64) (*longhorn.SupportBundle, error) {
+	logrus.Debugf("[%s] set state to %s", sb.Name, types.SupportBundleStateReadyForDownload)
+	toUpdate := sb.DeepCopy()
+	sbc.SupportBundleInitialized.True(toUpdate)
+	toUpdate.Status.State = types.SupportBundleStateReadyForDownload
+	toUpdate.Status.Progress = 100
+	toUpdate.Status.FileName = filename
+	toUpdate.Status.FileSize = filesize
+	return sbc.ds.UpdateSupportBundle(toUpdate)
+}
+
+func (sbc *SupportBundleController) setProgress(sb *longhorn.SupportBundle, progress int) (*longhorn.SupportBundle, error) {
+	logrus.Debugf("[%s] set progress to %d", sb.Name, progress)
+	toUpdate := sb.DeepCopy()
+	toUpdate.Status.Progress = progress
+	return sbc.ds.UpdateSupportBundle(toUpdate)
+}
+
+func (sbc *SupportBundleController) GetStatus(sb *longhorn.SupportBundle) (*ManagerStatus, error) {
+	podIP, err := manager.GetManagerPodIP(sbc.ds)
+	if err != nil {
+		return nil, err
 	}
 
-	toUpdate.Status.State = state
+	url := fmt.Sprintf("http://%s:8080/status", podIP)
+	httpClient := http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	s := &ManagerStatus{}
+	err = json.NewDecoder(resp.Body).Decode(s)
+	if err != nil {
+		return nil, err
+	}
+
+	return s, nil
+}
+
+type ManagerStatus struct {
+	// phase to collect bundle
+	Phase string
+
+	// fail to collect bundle
+	Error bool
+
+	// error message
+	ErrorMessage string
+
+	// progress of the bundle collecting. 0 - 100.
+	Progress int
+
+	// bundle filename
+	Filename string
+
+	// bundle filesize
+	Filesize int64
 }

@@ -2,6 +2,7 @@ package types
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"time"
 )
 
 type VolumeState string
@@ -777,14 +778,51 @@ type RecurringJobStatus struct {
 	OwnerID string `json:"ownerID"`
 }
 
+const (
+	SupportBundleLabelKey = "longhorn.io/supportbundle"
+
+	SupportBundleManager = "support-bundle-manager"
+
+	SupportBundleCreationTimeout = 8 * time.Minute
+)
+
+type SuppportBundleState string
+
+const (
+	SupportBundleStateNone             = SuppportBundleState("")
+	SupportBundleStateInProgress       = SuppportBundleState("InProgress")
+	SupportBundleStateReadyForDownload = SuppportBundleState("ReadyForDownload")
+	SupportBundleStateError            = SuppportBundleState("Error")
+)
+
+type SupportBundleError string
+
+const (
+	BundleErrorMkdirFailed = SupportBundleError("Failed to create bundle file directory")
+	BundleErrorZipFailed   = SupportBundleError("Failed to compress the support bundle files")
+	BundleErrorOpenFailed  = SupportBundleError("Failed to open the compressed bundle file")
+	BundleErrorStatFailed  = SupportBundleError("Failed to compute the size of the compressed bundle file")
+
+	SupportBundleProgressPercentageYaml  = 20
+	SupportBundleProgressPercentageLogs  = 75
+	SupportBundleProgressPercentageTotal = 100
+)
+
 type SupportBundleSpec struct {
-	IssueURL    string `json:"issueURL"`
-	Description string `json:"description"`
+	Name               string              `json:"name"`
+	FileName           string              `json:"filename"`
+	State              SuppportBundleState `json:"state"`
+	Size               int64               `json:"size"`
+	Error              SupportBundleError  `json:"error"`
+	ProgressPercentage int                 `json:"progresspercentage"`
+	IssueURL           string              `json:"issueURL"`
+	Description        string              `json:"description"`
 }
 
 type SupportBundleStatus struct {
-	State      string      `json:"state,omitempty"`
-	FileName   string      `json:"filename,omitempty"`
-	FileSize   int64       `json:"filesize,omitempty"`
-	Conditions []Condition `json:"conditions,omitempty"`
+	State      SuppportBundleState `json:"state,omitempty"`
+	Progress   int                 `json:"progress,omitempty"`
+	FileName   string              `json:"filename,omitempty"`
+	FileSize   int64               `json:"filesize,omitempty"`
+	Conditions []Condition         `json:"conditions,omitempty"`
 }

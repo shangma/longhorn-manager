@@ -1,13 +1,10 @@
 package api
 
 import (
-	"net/http"
-	"strconv"
-	"time"
-
 	"github.com/rancher/go-rancher/api"
 	"github.com/rancher/go-rancher/client"
 	"github.com/sirupsen/logrus"
+	"strconv"
 
 	v1 "k8s.io/api/core/v1"
 
@@ -262,6 +259,11 @@ type Tag struct {
 	client.Resource
 	Name    string `json:"name"`
 	TagType string `json:"tagType"`
+}
+
+type SupportBundleInitateInput struct {
+	IssueURL    string `json:"issueURL"`
+	Description string `json:"description"`
 }
 
 type BackupStatus struct {
@@ -1355,8 +1357,6 @@ type Server struct {
 	m   *manager.VolumeManager
 	wsc *controller.WebsocketController
 	fwd *Fwd
-
-	httpClient *http.Client
 }
 
 func NewServer(m *manager.VolumeManager, wsc *controller.WebsocketController) *Server {
@@ -1364,9 +1364,6 @@ func NewServer(m *manager.VolumeManager, wsc *controller.WebsocketController) *S
 		m:   m,
 		wsc: wsc,
 		fwd: NewFwd(m),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 	}
 	return s
 }
@@ -1437,6 +1434,21 @@ func toEventCollection(eventList *v1.EventList) *client.GenericCollection {
 		data = append(data, toEventResource(event))
 	}
 	return &client.GenericCollection{Data: data, Collection: client.Collection{ResourceType: "event"}}
+}
+
+//Support Bundle Resource
+func toSupportBundleResource(nodeID string, sb *longhorn.SupportBundle) *manager.SupportBundle {
+	return &manager.SupportBundle{
+		Resource: client.Resource{
+			Id:   nodeID,
+			Type: "supportbundle",
+		},
+		NodeID:             nodeID,
+		State:              sb.Spec.State,
+		Name:               sb.Name,
+		ErrorMessage:       sb.Spec.Error,
+		ProgressPercentage: sb.Spec.ProgressPercentage,
+	}
 }
 
 func toTagResource(tag string, tagType string, apiContext *api.ApiContext) *Tag {

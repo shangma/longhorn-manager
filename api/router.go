@@ -149,13 +149,17 @@ func NewRouter(s *Server) *mux.Router {
 		r.Methods("POST").Path("/v1/backingimages/{name}").Queries("action", name).Handler(f(schemas, action))
 	}
 
-	r.Methods("GET").Path("/v1/supportbundles/{bundleName}/download").Handler(f(schemas, s.SupportBundleDownload))
-
 	r.Methods("GET").Path("/v1/recurringjobs").Handler(f(schemas, s.RecurringJobList))
 	r.Methods("GET").Path("/v1/recurringjobs/{name}").Handler(f(schemas, s.RecurringJobGet))
 	r.Methods("DELETE").Path("/v1/recurringjobs/{name}").Handler(f(schemas, s.RecurringJobDelete))
 	r.Methods("POST").Path("/v1/recurringjobs").Handler(f(schemas, s.RecurringJobCreate))
 	r.Methods("PUT").Path("/v1/recurringjobs/{name}").Handler(f(schemas, s.RecurringJobUpdate))
+
+	r.Methods("POST").Path("/v1/supportbundles").Handler(f(schemas, s.InitiateSupportBundle))
+	r.Methods("GET").Path("/v1/supportbundles/{name}/{bundleName}").Handler(f(schemas,
+		s.fwd.Handler(s.fwd.HandleProxyRequestByNodeID, s.fwd.GetHTTPAddressByNodeID(OwnerIDFromNode(s.m)), s.QuerySupportBundle)))
+	r.Methods("GET").Path("/v1/supportbundles/{name}/{bundleName}/download").Handler(f(schemas,
+		s.fwd.Handler(s.fwd.HandleProxyRequestByNodeID, s.fwd.GetHTTPAddressByNodeID(OwnerIDFromNode(s.m)), s.DownloadSupportBundle)))
 
 	settingListStream := NewStreamHandlerFunc("settings", s.wsc.NewWatcher("setting"), s.settingList)
 	r.Path("/v1/ws/settings").Handler(f(schemas, settingListStream))

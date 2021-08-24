@@ -3,14 +3,13 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/errors"
 	"net"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/longhorn/longhorn-manager/util"
 )
@@ -178,17 +177,6 @@ const (
 	instanceManagerPrefix = "instance-manager-"
 	engineManagerPrefix   = instanceManagerPrefix + "e-"
 	replicaManagerPrefix  = instanceManagerPrefix + "r-"
-)
-
-const (
-	SupportBundleStateNone       = ""
-	SupportBundleStateGenerating = "generating"
-	SupportBundleStateError      = "error"
-	SupportBundleStateReady      = "ready"
-
-	SupportBundleLabelKey = "longhorn.io/supportbundle"
-
-	SupportBundleManager = "support-bundle-manager"
 )
 
 func GenerateEngineNameForVolume(vName string) string {
