@@ -783,7 +783,7 @@ const (
 
 	SupportBundleManager = "support-bundle-manager"
 
-	SupportBundleCreationTimeout = 8 * time.Minute
+	SupportBundleCreationTimeout = 60 * time.Minute
 )
 
 type SuppportBundleState string
