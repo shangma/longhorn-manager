@@ -189,10 +189,10 @@ func (sbc *SupportBundleController) reconcile(supportBundleName string) (err err
 	}
 
 	log := getLoggerForSupportBundle(sbc.logger, sb)
-	log.Debugf("owner version %s, owner kind %s", sb.APIVersion, sb.Kind)
+	
 	switch sb.Status.State {
 	case types.SupportBundleStateNone:
-		log.Debugf("[%s] generating a support bundle", sb.Name)
+		log.Debugf("[%s] generating a support bundle with kind [%s] and version [%s]", sb.Name, sb.Kind, sb.APIVersion)
 
 		supportBundleImage, err := sbc.ds.GetSetting(types.SettingNameSupportBundleImage)
 		if err != nil {
