@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
       - name: longhorn-manager
-        image: longhornio/longhorn-manager:master-head
-        imagePullPolicy: IfNotPresent
+        image: shangma/longhorn-manager:471d6949-dirty
+        imagePullPolicy: Always
         securityContext:
           privileged: true
         command:
@@ -33,7 +33,7 @@ spec:
         - --backing-image-manager-image
         - longhornio/backing-image-manager:v2_20210820
         - --manager-image
-        - longhornio/longhorn-manager:master-head
+        - shangma/longhorn-manager:471d6949-dirty
         - --service-account
         - longhorn-service-account
         ports:

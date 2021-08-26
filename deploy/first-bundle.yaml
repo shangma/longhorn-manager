@@ -1,0 +1,6 @@
+apiVersion: longhorn.io/v1beta1
+kind: SupportBundle
+metadata:
+  name: first-bundle
+spec:
+  description: "my first bundle"

@@ -189,7 +189,7 @@ func (sbc *SupportBundleController) reconcile(supportBundleName string) (err err
 	}
 
 	log := getLoggerForSupportBundle(sbc.logger, sb)
-	
+
 	switch sb.Status.State {
 	case types.SupportBundleStateNone:
 		log.Debugf("[%s] generating a support bundle with kind [%s] and version [%s]", sb.Name, sb.Kind, sb.APIVersion)
